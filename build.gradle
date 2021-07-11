@@ -11,6 +11,9 @@ repositories {
 
 dependencies {
     implementation('org.json:json:20210307')
+    implementation('org.apache.logging.log4j:log4j-api:2.14.1')
+    implementation('org.apache.logging.log4j:log4j-core:2.14.1')
+    implementation('mysql:mysql-connector-java:8.0.15')
     implementation 'com.squareup.okhttp3:okhttp:3.10.0'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
