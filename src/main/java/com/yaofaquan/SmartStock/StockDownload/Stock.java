@@ -18,7 +18,7 @@ public class Stock {
     private static final SimpleDateFormat sDateFormat = new SimpleDateFormat("YYYYMMDD");
 
     private static final String DB_DRIVER = "com.mysql.cj.jdbc.Driver";
-    private static final String DB_URL = "jdbc:mysql://120.79.203.124:3306/test";
+    private static final String DB_URL = "jdbc:mysql://120.79.203.124:3306/smart_stock?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
     private static final String DB_USER = "faquan.yao";
     private static final String DB_PWD = "999999";
     private static final String DB_CREATE_STOCK_DB = "CREATE TABLE IF NOT EXISTS Stock_%s (" +
@@ -119,8 +119,10 @@ public class Stock {
             Class.forName(DB_DRIVER);
             conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PWD);
             statement = conn.createStatement();
-            System.out.println(String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_')));
-            statement.executeUpdate(String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_')));
+            String sql = String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_'));
+            Main.sLogger.debug(sql);
+            System.out.println(sql);
+            statement.executeUpdate(sql);
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
         } finally {
