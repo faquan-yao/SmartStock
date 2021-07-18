@@ -114,25 +114,37 @@ public class Stock {
     public void saveToDb() {
         Connection conn = null;
         Statement statement = null;
-        ResultSet resultSet = null;
+        PreparedStatement preparedStatement = null;
         try {
             Class.forName(DB_DRIVER);
             conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PWD);
             statement = conn.createStatement();
-            String sql = String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_'));
-            Main.sLogger.debug(sql);
-            System.out.println(sql);
-            statement.executeUpdate(sql);
+            String dropTableSql = String.format("drop table if exists Stock_%s", mStockCode.replace('.', '_'));
+            statement.execute(dropTableSql);
+            String createTableSql = String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_'));
+            Main.sLogger.debug(createTableSql);
+            statement.execute(createTableSql);
+            statement.close();
+
+            String insetDataSQL= String.format("insert into Stock_%s(trade_date, open, high, low, close, vol, amount)" +
+                    " values(?, ?, ?, ?, ?, ?, ?)", mStockCode.replace('.', '_'));
+            Main.sLogger.debug(insetDataSQL);
+            preparedStatement = conn.prepareStatement(insetDataSQL);
+            for (int i = 0; i < mJSONArrayData.length(); i++) {
+                JSONArray item = mJSONArrayData.getJSONArray(i);
+                Main.sLogger.debug(item.toString());
+                preparedStatement.setString(1, item.getString(0));
+                preparedStatement.setDouble(2, item.getDouble(1));
+                preparedStatement.setDouble(3, item.getDouble(2));
+                preparedStatement.setDouble(4, item.getDouble(3));
+                preparedStatement.setDouble(5, item.getDouble(4));
+                preparedStatement.setDouble(6, item.getDouble(5));
+                preparedStatement.setDouble(7, item.getDouble(6));
+                preparedStatement.execute();
+            }
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
         } finally {
-            if (resultSet != null) {
-                try {
-                    resultSet.close();
-                } catch (SQLException throwables) {
-                    throwables.printStackTrace();
-                }
-            }
             if (statement != null) {
                 try {
                     statement.close();
