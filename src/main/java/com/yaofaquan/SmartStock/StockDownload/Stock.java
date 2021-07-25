@@ -1,14 +1,14 @@
 package com.yaofaquan.SmartStock.StockDownload;
 
+import com.yaofaquan.SmartStock.Application;
 import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.sql.*;
 import java.sql.Connection;
+import java.sql.*;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 
 public class Stock {
@@ -78,7 +78,7 @@ public class Stock {
         okHttpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-
+                Application.sLogger.debug("Download stock " + mStockCode + " failed.");
             }
 
             @Override
@@ -89,11 +89,12 @@ public class Stock {
                     System.out.println(headers.name(i) + ":" + headers.value(i));
                 }
                 String rawData = response.body().string();
-                System.out.println("onResponse: " + rawData);
+                Application.sLogger.debug("Download stock " + mStockCode + " received raw data is " + rawData);
 
                 JSONObject jsonObject = new JSONObject(rawData);
                 JSONObject data = jsonObject.getJSONObject("data");
                 mJSONArrayData = data.getJSONArray("items");
+                Application.sLogger.debug("");
                 System.out.println(mJSONArrayData.toString());
                 for (int i = 0; i < mJSONArrayData.length(); i++) {
                     JSONArray item = mJSONArrayData.getJSONArray(i);
@@ -122,17 +123,17 @@ public class Stock {
             String dropTableSql = String.format("drop table if exists Stock_%s", mStockCode.replace('.', '_'));
             statement.execute(dropTableSql);
             String createTableSql = String.format(DB_CREATE_STOCK_DB, mStockCode.replace('.','_'));
-            Main.sLogger.debug(createTableSql);
+            Application.sLogger.debug(createTableSql);
             statement.execute(createTableSql);
             statement.close();
 
-            String insetDataSQL= String.format("insert into Stock_%s(trade_date, open, high, low, close, vol, amount)" +
+            String insertDataSQL= String.format("insert into Stock_%s(trade_date, open, high, low, close, vol, amount)" +
                     " values(?, ?, ?, ?, ?, ?, ?)", mStockCode.replace('.', '_'));
-            Main.sLogger.debug(insetDataSQL);
-            preparedStatement = conn.prepareStatement(insetDataSQL);
+            Application.sLogger.debug(insertDataSQL);
+            preparedStatement = conn.prepareStatement(insertDataSQL);
             for (int i = 0; i < mJSONArrayData.length(); i++) {
                 JSONArray item = mJSONArrayData.getJSONArray(i);
-                Main.sLogger.debug(item.toString());
+                Application.sLogger.debug(item.toString());
                 preparedStatement.setString(1, item.getString(0));
                 preparedStatement.setDouble(2, item.getDouble(1));
                 preparedStatement.setDouble(3, item.getDouble(2));
