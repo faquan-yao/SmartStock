@@ -2,6 +2,10 @@ plugins {
     id 'java'
 }
 
+apply plugin: 'application'
+
+mainClassName = 'com.yaofaquan.SmartStock.Application'
+
 group 'com.yaofaquan'
 version '1.0-SNAPSHOT'
 
