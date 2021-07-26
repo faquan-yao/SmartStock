@@ -108,6 +108,7 @@ public class Stock {
                     }
                     System.out.println();
                 }
+                saveToDb();
             }
         });
     }
@@ -144,7 +145,7 @@ public class Stock {
                 preparedStatement.execute();
             }
         } catch (ClassNotFoundException | SQLException e) {
-            e.printStackTrace();
+            Application.sLogger.error("SaveDb error.", e);
         } finally {
             if (statement != null) {
                 try {
