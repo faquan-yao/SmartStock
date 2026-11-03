@@ -3,13 +3,52 @@ from __future__ import print_function, absolute_import
 from gm.api import *
 from datetime import datetime, timedelta
 
+def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
+    """
+    获取所有正常A股代码（剔除ST、科创板、北交所、创业板）
+    :param skip_suspended: 是否剔除停牌股票
+    :return: list, [SHSE.600000, SZSE.000001 ...]
+    """
+    # sec_type1=1010：股票；sec_type2=101001：A股
+    df = get_symbols(
+        sec_type1=1010,
+        sec_type2=101001,
+        df=True
+    )
+
+    # 1. 过滤ST股票
+    df = df[df["is_st"] == False]
+
+    # 2. 过滤停牌
+    if skip_suspended:
+        df = df[df["is_suspended"] == False]
+
+    # 3. 过滤科创板 688开头、北交所 8开头、创业板 300开头
+    def filter_board(symbol: str):
+        # symbol样例 SHSE.688001 / SZSE.000001
+        code = symbol.split(".")[-1]
+        if code.startswith("688"):
+            return False
+        if code.startswith("8"):
+            return False
+        if code.startswith("300"):
+            return False
+        return True
+
+    df = df[df["symbol"].apply(filter_board)]
+
+    # 转为列表
+    stock_list = df["symbol"].tolist()
+    return stock_list
 
 def init(context):
-    # 订阅浦发银行, bar频率为一天和一分钟
-    # 订阅订阅多个频率的数据，可多次调用subscribe
-    subscribe(symbols='SHSE.603893', frequency='1d')
-    # subscribe(symbols='SHSE.603893', frequency='60s')
-    # subscribe(symbols='SHSE.603893', frequency='tick')
+    symbols = get_normal_a_stock_list()
+    print("size of symbols: ", symbols.__len__())
+    for symbol in symbols:
+        history_data = history_n(symbol, '1d', 400, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
+        if history_data is None or len(history_data) == 0:
+            continue
+        history_data.to_csv(f'data\\history_{str(symbol).replace('.', '')}.csv', index=False)
 
 
 def on_tick(context, tick):
