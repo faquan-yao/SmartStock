@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 from indicators import compute_all
 from segment import linear_segment
 from charts import plot_chart
+from logsetup import get_logger
+
+logger = get_logger()
 
 def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
     """
@@ -46,38 +49,52 @@ def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
 
 def init(context):
     symbols = get_normal_a_stock_list()
-    print("size of symbols: ", symbols.__len__())
+    logger.info("股票池 %s 只", len(symbols))
     i = 0
     for symbol in symbols:
-        history_data = history_n(symbol, '1d', 500, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
-        if history_data is None or len(history_data) == 0:
+        try:
+            history_data = history_n(symbol, '1d', 500, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
+            if history_data is None or len(history_data) == 0:
+                logger.warning("%s 没有日线，已跳过", symbol)
+                continue
+            history_data = compute_all(history_data)
+            history_data = history_data.tail(250)
+            segment_data = linear_segment(history_data)
+            history_data = history_data.merge(segment_data[["eob", "segment"]], on="eob", how="left")
+            stem = str(symbol).replace(".", "_")
+            png_path = f"data\\{stem}.png"
+            csv_path = f"data\\{stem}.csv"
+            plot_chart(history_data, png_path)
+            history_data.to_csv(csv_path, index=False)
+            logger.info("%s 完成，%s 行，图 %s，表 %s", symbol, len(history_data), png_path, csv_path)
+        except Exception:
+            logger.exception("%s 处理失败", symbol)
             continue
-        history_data = compute_all(history_data)
-        history_data = history_data.tail(250)
-        segment_data = linear_segment(history_data)
-        history_data = history_data.merge(segment_data[["eob", "segment"]], on="eob", how="left")
-        plot_chart(history_data, f'data\\{str(symbol).replace('.', '_')}.png')
-        history_data.to_csv(f'data\\{str(symbol).replace('.', '_')}.csv', index=False)
         i = i + 1
         if i > 10:
+            logger.info("已处理 %s 只，按上限停止", i)
             break
 
 
 def on_tick(context, tick):
-    # 打印tick数据
-    print(f'tick {tick["symbol"]}: {tick["open"]}, {tick["high"]}, {tick["low"]}', sep='\n')
+    logger.info("tick %s: %s, %s, %s", tick["symbol"], tick["open"], tick["high"], tick["low"])
     for quote in tick["quotes"]:
-        print(f'\t\t{quote["bid_p"]}, {quote["bid_v"]}, {quote["ask_p"]}, {quote["ask_v"]}', sep='\n')
+        logger.info("    %s, %s, %s, %s", quote["bid_p"], quote["bid_v"], quote["ask_p"], quote["ask_v"])
 
 
 def on_bar(context, bars):
     for bar in bars:
-        # 打印bar数据
-        print(
-            f'bar {bar["symbol"]} - {bar["frequency"]}: {bar["open"]}, {bar["high"]}, {bar["low"]}, {bar["close"]}, {bar["volume"]}',
-            sep='\n')
-
-    print(f"context positions {context.account().positions()}")
+        logger.info(
+            "bar %s - %s: %s, %s, %s, %s, %s",
+            bar["symbol"],
+            bar["frequency"],
+            bar["open"],
+            bar["high"],
+            bar["low"],
+            bar["close"],
+            bar["volume"],
+        )
+    logger.info("持仓 %s", context.account().positions())
 
 
 if __name__ == '__main__':

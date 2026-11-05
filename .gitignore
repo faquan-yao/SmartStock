@@ -130,6 +130,7 @@ cython_debug/
 *.json
 !requirements.json
 data/
+logs/
 tmp/
 temp/
 *.pem
