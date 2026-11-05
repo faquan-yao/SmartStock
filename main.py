@@ -3,6 +3,8 @@ from __future__ import print_function, absolute_import
 from gm.api import *
 from datetime import datetime, timedelta
 from indicators import compute_all
+from segment import linear_segment
+from charts import plot_chart
 
 def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
     """
@@ -45,13 +47,20 @@ def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
 def init(context):
     symbols = get_normal_a_stock_list()
     print("size of symbols: ", symbols.__len__())
-    # for symbol in symbols:
-    #     history_data = history_n(symbol, '1d', 500, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
-    #     if history_data is None or len(history_data) == 0:
-    #         continue
-    #     history_data = compute_all(history_data)
-    #     history_data = history_data.tail(250)
-    #     history_data.to_csv(f'data\\{str(symbol).replace('.', '_')}.csv', index=False)
+    i = 0
+    for symbol in symbols:
+        history_data = history_n(symbol, '1d', 500, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
+        if history_data is None or len(history_data) == 0:
+            continue
+        history_data = compute_all(history_data)
+        history_data = history_data.tail(250)
+        segment_data = linear_segment(history_data)
+        history_data = history_data.merge(segment_data[["eob", "segment"]], on="eob", how="left")
+        plot_chart(history_data, f'data\\{str(symbol).replace('.', '_')}.png')
+        history_data.to_csv(f'data\\{str(symbol).replace('.', '_')}.csv', index=False)
+        i = i + 1
+        if i > 10:
+            break
 
 
 def on_tick(context, tick):
