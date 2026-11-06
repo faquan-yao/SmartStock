@@ -83,10 +83,19 @@ def plot_chart(
     max_error: float = DEFAULT_MAX_ERROR,
     title: str | None = None,
     indicators=None,
+    predictions: pd.DataFrame | None = None,
 ) -> Path:
-    """计算选定指标和分段，按同花顺配色画图并保存 PNG。返回图片路径。"""
+    """计算选定指标和分段，按同花顺配色画图并保存 PNG。返回图片路径。
+
+    predictions 为 predict_segment 的结果时，在主图对应的 eob 位置加预测斜率散点。
+    """
     frame = build_chart_frame(df, max_error=max_error, indicators=indicators)
-    figure = draw_chart(frame, title=title or _title_from_frame(frame), indicators=indicators)
+    figure = draw_chart(
+        frame,
+        title=title or _title_from_frame(frame),
+        indicators=indicators,
+        predictions=predictions,
+    )
     destination = Path(output_path) if output_path is not None else _default_chart_path(frame)
     destination.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(destination, dpi=120, facecolor=figure.get_facecolor())

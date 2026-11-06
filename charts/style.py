@@ -14,6 +14,7 @@ GUIDE = "#c8c8c8"
 UP = "#ff3232"
 DOWN = "#00a3a3"
 SEGMENT = "#e69500"
+PREDICT_NEGATIVE = "#1a9a1a"
 CLOSE = "#222222"
 
 MA_COLORS = {

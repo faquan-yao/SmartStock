@@ -24,7 +24,7 @@ from charts import (
     write_chart,
 )
 from charts.segment_path import break_on_trend_change
-from charts.style import BG, DOWN, SEGMENT, UP
+from charts.style import BG, DOWN, PREDICT_NEGATIVE, SEGMENT, TEXT, UP
 from indicators import indicator_column_names
 
 matplotlib.use("Agg")
@@ -139,6 +139,45 @@ def test_draw_chart_panels_candles_and_segment_line():
         import matplotlib.pyplot as plt
 
         plt.close(figure)
+
+
+def test_predicted_slopes_scatter_at_the_matching_eob():
+    built = build_chart_frame(rising_then_falling(), max_error=0.03)
+    predictions = pd.DataFrame(
+        {
+            "eob": [built["eob"].iloc[2], built["eob"].iloc[4], built["eob"].iloc[5], built["eob"].iloc[6]],
+            "segment": [40.0, -30.0, 0.0, 12.0],
+        }
+    )
+    figure = draw_chart(built, predictions=predictions)
+    try:
+        price = figure.chart_axes[0]
+        slope_axis = figure.prediction_axis
+        assert price.get_ylim()[1] < 20
+        assert price.yaxis.get_ticks_position() == "left"
+        assert slope_axis.yaxis.get_ticks_position() == "right"
+        assert figure.chart_axes[1].yaxis.get_ticks_position() == "right"
+        assert figure.chart_axes[2].yaxis.get_ticks_position() == "right"
+        by_label = {collection.get_label(): collection for collection in slope_axis.collections}
+        assert by_label["斜率>0"].get_offsets().tolist() == [[2, 40], [6, 12]]
+        assert by_label["斜率<0"].get_offsets().tolist() == [[4, -30]]
+        assert by_label["斜率=0"].get_offsets().tolist() == [[5, 0]]
+        assert to_rgba(by_label["斜率>0"].get_facecolor()) == pytest.approx(to_rgba(UP))
+        assert to_rgba(by_label["斜率<0"].get_facecolor()) == pytest.approx(to_rgba(PREDICT_NEGATIVE))
+        assert to_rgba(by_label["斜率=0"].get_facecolor()) == pytest.approx(to_rgba(BG))
+        assert to_rgba(by_label["斜率=0"].get_edgecolor()) == pytest.approx(to_rgba(TEXT))
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figure)
+
+    missing = predictions.drop(columns=["segment"])
+    with pytest.raises(ValueError, match="segment"):
+        draw_chart(built, predictions=missing)
+    unknown = predictions.copy()
+    unknown["eob"] = ["1999-01-01", "1999-01-02", "1999-01-03", "1999-01-04"]
+    with pytest.raises(ValueError, match="eob"):
+        draw_chart(built, predictions=unknown)
 
 
 def test_indicators_argument_selects_panels_and_rejects_unknown_names():

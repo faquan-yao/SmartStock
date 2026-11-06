@@ -24,6 +24,7 @@ from charts.style import (
     GUIDE,
     LINE_COLORS,
     MA_COLORS,
+    PREDICT_NEGATIVE,
     SEGMENT,
     SPINE,
     TEXT,
@@ -64,8 +65,12 @@ def require_chart_columns(frame, indicators=None) -> None:
         raise ValueError("缺少绘图列: " + ", ".join(missing))
 
 
-def draw_chart(frame, title: str | None = None, indicators=None) -> Figure:
-    """按选定指标画白底图。K 线和分段折线始终绘制。返回 Figure，调用方负责关闭。"""
+def draw_chart(frame, title: str | None = None, indicators=None, predictions=None) -> Figure:
+    """按选定指标画白底图。K 线和分段折线始终绘制。返回 Figure，调用方负责关闭。
+
+    predictions 含 eob 和 segment 时，在 K 线主图上按对应的交易日位置画预测斜率散点。
+    散点使用右侧斜率刻度。K 线价格刻度留在左侧，其他副图刻度不变。
+    """
     names = resolve_indicators(indicators)
     require_chart_columns(frame, names)
     if len(frame) == 0:
@@ -96,6 +101,9 @@ def draw_chart(frame, title: str | None = None, indicators=None) -> Figure:
     for ax, (panel_name, _height), drawer in zip(axes, panels, drawers):
         drawer(ax, frame, selected)
         _finish_panel(ax, panel_name)
+
+    if predictions is not None:
+        _draw_predicted_slopes(axes[0], frame, predictions)
 
     _format_dates(axes[-1], frame["eob"])
     axes[0].set_xlim(-0.5, len(frame) - 0.5)
@@ -266,6 +274,94 @@ def _draw_price(ax: Axes, frame, selected: set[str]) -> None:
     xs, ys = segment_vertices(closes, frame["segment"].to_numpy(dtype=float))
     if len(xs):
         ax.plot(xs, ys, color=SEGMENT, linewidth=1.8, label="分段", zorder=5)
+
+
+def _draw_predicted_slopes(ax: Axes, frame, predictions) -> None:
+    """把预测斜率画成散点。横坐标是这张图里对应 eob 的 K 线序号。"""
+    import pandas as pd
+
+    if not isinstance(predictions, pd.DataFrame):
+        raise TypeError("预测结果需要 pandas.DataFrame")
+    missing = [column for column in ("eob", "segment") if column not in predictions.columns]
+    if missing:
+        raise ValueError("预测结果缺少列: " + ", ".join(missing))
+    if len(predictions) == 0:
+        return
+
+    xs, ys = _prediction_positions(frame["eob"], predictions)
+    if len(xs) == 0:
+        raise ValueError("预测结果的 eob 不在当前图中")
+
+    twin = ax.twinx()
+    _scatter_signed(twin, xs, ys)
+    twin.set_facecolor("none")
+    twin.grid(False)
+    # twinx 会改动主图纵轴。价格刻度留在左侧，斜率刻度单独放在右侧。
+    # 成交量、MACD 等其他面板不在这里改动。
+    ax.yaxis.tick_left()
+    ax.tick_params(axis="y", colors=TEXT, labelsize=8, labelleft=True, labelright=False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["right"].set_visible(False)
+    twin.yaxis.tick_right()
+    twin.tick_params(axis="y", colors=TEXT, labelsize=8, labelleft=False, labelright=True)
+    twin.set_ylabel("预测斜率", color=TEXT, fontsize=8)
+    for name in ("left", "top", "bottom"):
+        twin.spines[name].set_visible(False)
+    twin.spines["right"].set_visible(True)
+    twin.spines["right"].set_color(SPINE)
+    handles, _labels = twin.get_legend_handles_labels()
+    if handles:
+        legend = twin.legend(loc="upper right", fontsize=7, frameon=False, labelcolor=TEXT)
+        for text in legend.get_texts():
+            text.set_color(TEXT)
+    ax.figure.prediction_axis = twin
+
+
+def _scatter_signed(ax: Axes, xs: np.ndarray, ys: np.ndarray) -> None:
+    """大于 0 为红点，小于 0 为绿点，等于 0 为白底圆圈。"""
+    positive = ys > 0
+    negative = ys < 0
+    zero = ys == 0
+    if positive.any():
+        ax.scatter(xs[positive], ys[positive], s=18, c=UP, marker="o", label="斜率>0", zorder=6)
+    if negative.any():
+        ax.scatter(xs[negative], ys[negative], s=18, c=PREDICT_NEGATIVE, marker="o", label="斜率<0", zorder=6)
+    if zero.any():
+        ax.scatter(
+            xs[zero],
+            ys[zero],
+            s=28,
+            facecolors=BG,
+            edgecolors=TEXT,
+            linewidths=1.0,
+            marker="o",
+            label="斜率=0",
+            zorder=6,
+        )
+
+
+def _prediction_positions(frame_eob, predictions):
+    import pandas as pd
+
+    slopes = pd.to_numeric(predictions["segment"], errors="coerce").to_numpy(dtype=float)
+    frame_time = pd.to_datetime(frame_eob, errors="coerce", utc=True)
+    pred_time = pd.to_datetime(predictions["eob"], errors="coerce", utc=True)
+    if bool(frame_time.notna().all()) and bool(pred_time.notna().all()):
+        index_of = {value: index for index, value in enumerate(frame_time)}
+        keys = list(pred_time)
+    else:
+        index_of = {str(value): index for index, value in enumerate(frame_eob)}
+        keys = [str(value) for value in predictions["eob"]]
+
+    xs = []
+    ys = []
+    for key, slope in zip(keys, slopes):
+        index = index_of.get(key)
+        if index is None or not np.isfinite(slope):
+            continue
+        xs.append(index)
+        ys.append(float(slope))
+    return np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)
 
 
 def _draw_sar(ax: Axes, frame) -> None:

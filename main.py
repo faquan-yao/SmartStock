@@ -6,6 +6,7 @@ from indicators import compute_all
 from segment import linear_segment
 from charts import plot_chart
 from logsetup import get_logger
+from forecast import predict_segment, train_segment_model
 
 logger = get_logger()
 
@@ -53,25 +54,30 @@ def init(context):
     i = 0
     for symbol in symbols:
         try:
-            history_data = history_n(symbol, '1d', 500, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
+            history_data = history_n(symbol, '1d', 625, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
             if history_data is None or len(history_data) == 0:
                 logger.warning("%s 没有日线，已跳过", symbol)
                 continue
             history_data = compute_all(history_data)
-            history_data = history_data.tail(250)
+            history_data = history_data.tail(375)
             segment_data = linear_segment(history_data)
             history_data = history_data.merge(segment_data[["eob", "segment"]], on="eob", how="left")
+            train_set = history_data[:250]
+            test_set = history_data[250:]
+            model = train_segment_model(train_set, epochs=700)
+            predicted = predict_segment(test_set, model)
+
             stem = str(symbol).replace(".", "_")
             png_path = f"data\\{stem}.png"
             csv_path = f"data\\{stem}.csv"
-            plot_chart(history_data, png_path)
-            history_data.to_csv(csv_path, index=False)
-            logger.info("%s 完成，%s 行，图 %s，表 %s", symbol, len(history_data), png_path, csv_path)
+            plot_chart(test_set, png_path, predictions=predicted)
+            test_set.to_csv(csv_path, index=False)
+            logger.info("%s 完成，%s 行，图 %s，表 %s", symbol, len(test_set), png_path, csv_path)
         except Exception:
             logger.exception("%s 处理失败", symbol)
             continue
         i = i + 1
-        if i > 10:
+        if i >= 10:
             logger.info("已处理 %s 只，按上限停止", i)
             break
 
