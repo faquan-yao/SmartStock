@@ -24,7 +24,7 @@ from charts import (
     write_chart,
 )
 from charts.segment_path import break_on_trend_change
-from charts.style import BG, DOWN, PREDICT_NEGATIVE, SEGMENT, TEXT, UP
+from charts.style import BG, DOWN, SEGMENT, TEXT, UP
 from indicators import indicator_column_names
 
 matplotlib.use("Agg")
@@ -59,6 +59,15 @@ def line_by_label(ax, label: str):
         if line.get_label() == label:
             return line
     raise AssertionError(f"找不到曲线 {label}")
+
+
+def _horizontal_guides(ax):
+    found = {}
+    for line in ax.get_lines():
+        ydata = np.asarray(line.get_ydata(), dtype=float)
+        if ydata.size >= 2 and np.allclose(ydata, ydata[0]):
+            found[float(ydata[0])] = line
+    return found
 
 
 def test_segment_vertices_follow_shared_endpoint_rule():
@@ -109,6 +118,20 @@ def test_chart_frame_appends_indicators_and_segment_without_mutating():
         assert column in everything.columns
 
 
+def test_existing_indicator_columns_are_kept():
+    data = rising_then_falling()
+    data["ma5"] = 7.0
+    data["macd_dif"] = -3.0
+    data["segment"] = 0.5
+    fresh = build_chart_frame(rising_then_falling(), max_error=0.03)
+    built = build_chart_frame(data, max_error=0.03)
+    assert built["ma5"].tolist() == pytest.approx([7.0] * len(data))
+    assert built["ma10"].tolist() == pytest.approx(fresh["ma10"].tolist(), nan_ok=True)
+    assert built["macd_dif"].tolist() == pytest.approx([-3.0] * len(data))
+    assert built["macd_dea"].tolist() == pytest.approx(fresh["macd_dea"].tolist(), nan_ok=True)
+    assert built["segment"].tolist() == pytest.approx([0.5] * len(data))
+
+
 def test_draw_chart_panels_candles_and_segment_line():
     built = build_chart_frame(rising_then_falling(), max_error=0.03)
     figure = draw_chart(built)
@@ -151,25 +174,59 @@ def test_predicted_slopes_scatter_at_the_matching_eob():
     )
     figure = draw_chart(built, predictions=predictions)
     try:
+        titles = [ax.get_title(loc="left") for ax in figure.chart_axes]
+        assert titles[:4] == ["K线", "预测斜率", "成交量", "MACD"]
         price = figure.chart_axes[0]
-        slope_axis = figure.prediction_axis
+        slope_axis = figure.chart_axes[1]
         assert price.get_ylim()[1] < 20
         assert price.yaxis.get_ticks_position() == "left"
-        assert slope_axis.yaxis.get_ticks_position() == "right"
-        assert figure.chart_axes[1].yaxis.get_ticks_position() == "right"
-        assert figure.chart_axes[2].yaxis.get_ticks_position() == "right"
-        by_label = {collection.get_label(): collection for collection in slope_axis.collections}
-        assert by_label["斜率>0"].get_offsets().tolist() == [[2, 40], [6, 12]]
-        assert by_label["斜率<0"].get_offsets().tolist() == [[4, -30]]
-        assert by_label["斜率=0"].get_offsets().tolist() == [[5, 0]]
-        assert to_rgba(by_label["斜率>0"].get_facecolor()) == pytest.approx(to_rgba(UP))
-        assert to_rgba(by_label["斜率<0"].get_facecolor()) == pytest.approx(to_rgba(PREDICT_NEGATIVE))
-        assert to_rgba(by_label["斜率=0"].get_facecolor()) == pytest.approx(to_rgba(BG))
-        assert to_rgba(by_label["斜率=0"].get_edgecolor()) == pytest.approx(to_rgba(TEXT))
+        assert slope_axis.yaxis.get_ticks_position() == "left"
+        assert figure.chart_axes[2].yaxis.get_ticks_position() == "left"
+        line = line_by_label(slope_axis, "预测斜率")
+        assert line.get_xdata().tolist() == [2, 4, 5, 6]
+        assert line.get_ydata().tolist() == pytest.approx([40, -30, 0, 12])
+        assert slope_axis.get_yticks().tolist() == pytest.approx([-30, 0, 40])
+        guides = _horizontal_guides(slope_axis)
+        assert guides[40].get_linestyle() == "--"
+        assert guides[-30].get_linestyle() == "--"
+        assert guides[0].get_linestyle() == "--"
+        assert to_rgba(guides[40].get_color()) == pytest.approx(to_rgba(TEXT))
+        assert to_rgba(guides[-30].get_color()) == pytest.approx(to_rgba(TEXT))
+        assert to_rgba(guides[0].get_color()) == pytest.approx(to_rgba(UP))
     finally:
         import matplotlib.pyplot as plt
 
         plt.close(figure)
+
+    positive = predictions.copy()
+    positive["segment"] = [4.0, 12.0, 7.0, 9.0]
+    positive_figure = draw_chart(built, predictions=positive)
+    try:
+        positive_axis = positive_figure.chart_axes[1]
+        assert positive_axis.get_yticks().tolist() == pytest.approx([0, 12])
+        positive_guides = _horizontal_guides(positive_axis)
+        assert 4.0 not in positive_guides
+        assert to_rgba(positive_guides[12].get_color()) == pytest.approx(to_rgba(TEXT))
+        assert to_rgba(positive_guides[0].get_color()) == pytest.approx(to_rgba(UP))
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(positive_figure)
+
+    negative = predictions.copy()
+    negative["segment"] = [-12.0, -4.0, -7.0, -9.0]
+    negative_figure = draw_chart(built, predictions=negative)
+    try:
+        negative_axis = negative_figure.chart_axes[1]
+        assert negative_axis.get_yticks().tolist() == pytest.approx([-12, 0])
+        negative_guides = _horizontal_guides(negative_axis)
+        assert -4.0 not in negative_guides
+        assert to_rgba(negative_guides[-12].get_color()) == pytest.approx(to_rgba(TEXT))
+        assert to_rgba(negative_guides[0].get_color()) == pytest.approx(to_rgba(UP))
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(negative_figure)
 
     missing = predictions.drop(columns=["segment"])
     with pytest.raises(ValueError, match="segment"):

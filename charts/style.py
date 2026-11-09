@@ -14,7 +14,6 @@ GUIDE = "#c8c8c8"
 UP = "#ff3232"
 DOWN = "#00a3a3"
 SEGMENT = "#e69500"
-PREDICT_NEGATIVE = "#1a9a1a"
 CLOSE = "#222222"
 
 MA_COLORS = {
@@ -47,8 +46,8 @@ def configure_font() -> None:
 
 def apply_axes(ax: Axes) -> None:
     ax.set_facecolor(BG)
-    ax.tick_params(colors=TEXT, labelsize=8, labelright=True, labelleft=False)
-    ax.yaxis.tick_right()
+    ax.tick_params(colors=TEXT, labelsize=8, labelright=False, labelleft=True)
+    ax.yaxis.tick_left()
     for spine in ax.spines.values():
         spine.set_color(SPINE)
     ax.grid(True, color=GRID, linestyle=":", linewidth=0.5)

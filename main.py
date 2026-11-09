@@ -1,5 +1,8 @@
 # coding=utf-8
 from __future__ import print_function, absolute_import
+
+import random
+
 from gm.api import *
 from datetime import datetime, timedelta
 from indicators import compute_all
@@ -51,8 +54,9 @@ def get_normal_a_stock_list(skip_suspended: bool = True) -> list:
 def init(context):
     symbols = get_normal_a_stock_list()
     logger.info("股票池 %s 只", len(symbols))
-    i = 0
-    for symbol in symbols:
+    samples = random.sample(symbols, 20)
+    logger.info("随机选取其中20只股票进行研究：%s", samples)
+    for symbol in samples:
         try:
             history_data = history_n(symbol, '1d', 625, fields='symbol, eob, open, close, low, high, volume, amount', adjust=ADJUST_PREV, df=True)
             if history_data is None or len(history_data) == 0:
@@ -64,7 +68,7 @@ def init(context):
             history_data = history_data.merge(segment_data[["eob", "segment"]], on="eob", how="left")
             train_set = history_data[:250]
             test_set = history_data[250:]
-            model = train_segment_model(train_set, epochs=700)
+            model = train_segment_model(train_set, epochs=100)
             predicted = predict_segment(test_set, model)
 
             stem = str(symbol).replace(".", "_")
@@ -76,10 +80,6 @@ def init(context):
         except Exception:
             logger.exception("%s 处理失败", symbol)
             continue
-        i = i + 1
-        if i >= 10:
-            logger.info("已处理 %s 只，按上限停止", i)
-            break
 
 
 def on_tick(context, tick):

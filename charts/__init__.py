@@ -12,6 +12,7 @@ from charts.selection import (
     DEFAULT_INDICATORS,
     INDICATOR_NAMES,
     chart_panels,
+    required_columns,
     resolve_indicators,
 )
 from indicators._common import prepare
@@ -63,17 +64,25 @@ _CALCULATORS = {
 
 
 def build_chart_frame(df: pd.DataFrame, max_error: float = DEFAULT_MAX_ERROR, indicators=None) -> pd.DataFrame:
-    """计算选定指标，并按同一行序附上分段斜率。不修改调用方的表。"""
+    """补齐选定指标里输入表没有的列，并在缺少分段时附上分段斜率。不修改调用方的表。
+
+    输入里已经有的指标列原样保留。一个指标只缺部分列时，只计算缺的那些列。
+    """
     names = resolve_indicators(indicators)
     out = prepare(df)
     for name in names:
+        columns = required_columns((name,))
+        missing = [column for column in columns if column not in out.columns]
+        if not missing:
+            continue
         part = _CALCULATORS[name](out, prepared=True)
-        for column in part.columns:
+        for column in missing:
             out[column] = part[column].to_numpy()
-    slopes = linear_segment(out, max_error=max_error)
-    if len(out) != len(slopes):
-        raise ValueError("指标与分段行数不一致")
-    out["segment"] = slopes["segment"].to_numpy()
+    if "segment" not in out.columns:
+        slopes = linear_segment(out, max_error=max_error)
+        if len(out) != len(slopes):
+            raise ValueError("指标与分段行数不一致")
+        out["segment"] = slopes["segment"].to_numpy()
     return out
 
 
@@ -87,7 +96,7 @@ def plot_chart(
 ) -> Path:
     """计算选定指标和分段，按同花顺配色画图并保存 PNG。返回图片路径。
 
-    predictions 为 predict_segment 的结果时，在主图对应的 eob 位置加预测斜率散点。
+    predictions 为 predict_segment 的结果时，在 K 线正下方单独加一块预测斜率折线图。
     """
     frame = build_chart_frame(df, max_error=max_error, indicators=indicators)
     figure = draw_chart(
